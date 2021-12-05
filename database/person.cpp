@@ -224,18 +224,17 @@ namespace database
     std::vector<Person> Person::search(std::string first_name, std::string last_name)
     {
         std::vector<Person> result;
+        addPercentsToName(last_name);
+        addPercentsToName(first_name);
+        Person a;
         for (std::string hint: database::Database::get_all_hints()) {
+            Poco::Data::Session session = database::Database::get().create_session();
+            Statement select(session);
             try {
-                Poco::Data::Session session = database::Database::get().create_session();
-                Statement select(session);
 
-                Person a;
-
-                addPercentsToName(last_name);
-                addPercentsToName(first_name);
 
                 select
-                        << "SELECT login, first_name, last_name, age FROM Person where first_name LIKE ? and last_name LIKE ? ;" + hint,
+                        << "SELECT login, first_name, last_name, age FROM Person where first_name LIKE ? and last_name LIKE ? " + hint,
                         into(a._login),
                         into(a._first_name),
                         into(a._last_name),
@@ -247,20 +246,24 @@ namespace database
                 while (!select.done()) {
                     select.execute();
                     std::cout << " selecting from " << " " << hint << " result" << std::endl;
+                    std::cout << " selecting from " << " " << a._login  << std::endl;
                     result.push_back(a);
                 }
             }
-
             catch (Poco::Data::MySQL::ConnectionException &e) {
                 std::cout << "connection:" << e.what() << std::endl;
-                throw;
+              //  throw;
             }
             catch (Poco::Data::MySQL::StatementException &e) {
 
                 std::cout << "statement:" << e.what() << std::endl;
-                throw;
+             //   throw;
+            }
+            catch (...) {
+
             }
         }
+        std :: cout << "give res" << std::endl;
         return result;
     }
 
