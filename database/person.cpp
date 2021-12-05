@@ -37,23 +37,23 @@ namespace database
     {
         try
         {
-
-            Poco::Data::Session session = database::Database::get().create_session();
-            //*
-            Statement drop_stmt(session);
-            drop_stmt << "DROP TABLE IF EXISTS Person", now;
-            //*/
-
-            // (re)create table
-            Statement create_stmt(session);
-
-            create_stmt << "CREATE TABLE IF NOT EXISTS `Person` (`login`  VARCHAR(256) CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL,"
-                        << "`first_name` VARCHAR(256) CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL,"
-                        << "`last_name` VARCHAR(256) CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL,"
-                        << "`age` INTEGER NOT NULL,"
-                        << "PRIMARY KEY (`login`),"
-                        << "INDEX `login` (`login`));",
-                now;
+//
+//            Poco::Data::Session session = database::Database::get().create_session();
+//            //*
+//            Statement drop_stmt(session);
+//            drop_stmt << "DROP TABLE IF EXISTS Person", now;
+//            //*/
+//
+//            // (re)create table
+//            Statement create_stmt(session);
+//
+//            create_stmt << "CREATE TABLE IF NOT EXISTS `Person` (`login`  VARCHAR(256) CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL,"
+//                        << "`first_name` VARCHAR(256) CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL,"
+//                        << "`last_name` VARCHAR(256) CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL,"
+//                        << "`age` INTEGER NOT NULL,"
+//                        << "PRIMARY KEY (`login`),"
+//                        << "INDEX `login` (`login`));",
+//                now;
             generate_data();
         }
 
@@ -110,7 +110,6 @@ namespace database
             std::cout << "read " << count<< std::endl;
             a.save_to_cache();
             ++count;
-//            break;
         }
         std::cout << "done: " << count << std::endl;
     }
@@ -122,7 +121,8 @@ namespace database
             Poco::Data::Session session = database::Database::get().create_session();
             Poco::Data::Statement select(session);
             Person a;
-            select << "SELECT login, first_name, last_name, age FROM Person where login=?",
+            select << "SELECT login, first_name, last_name, age FROM Person where login=? " +
+            database::Database::get().sharding_hint(login),
                 into(a._login),
                 into(a._first_name),
                 into(a._last_name),
@@ -178,38 +178,38 @@ namespace database
 
     std::vector<Person> Person::read_all()
     {
-        try
-        {
-            Poco::Data::Session session = database::Database::get().create_session();
-            Statement select(session);
-            std::vector<Person> result;
-            Person a;
-            select << "SELECT login, first_name, last_name, age FROM Person",
-                into(a._login),
-                into(a._first_name),
-                into(a._last_name),
-                into(a._age),
-                range(1, 1); //  iterate over result set one row at a time
+        std::vector<Person> result;
+        for (std::string hint: database::Database::get_all_hints()) {
+            try {
+                Poco::Data::Session session = database::Database::get().create_session();
+                Statement select(session);
 
-            while (!select.done())
-            {
-                select.execute();
-                result.push_back(a);
+                Person a;
+                select << "SELECT login, first_name, last_name, age FROM Person; " + hint,
+                        into(a._login),
+                        into(a._first_name),
+                        into(a._last_name),
+                        into(a._age),
+                        range(1, 1); //  iterate over result set one row at a time
+
+                while (!select.done()) {
+                    select.execute();
+                    result.push_back(a);
+                }
+
             }
-            return result;
-        }
 
-        catch (Poco::Data::MySQL::ConnectionException &e)
-        {
-            std::cout << "connection:" << e.what() << std::endl;
-            throw;
-        }
-        catch (Poco::Data::MySQL::StatementException &e)
-        {
+            catch (Poco::Data::MySQL::ConnectionException &e) {
+                std::cout << "connection:" << e.what() << std::endl;
+                throw;
+            }
+            catch (Poco::Data::MySQL::StatementException &e) {
 
-            std::cout << "statement:" << e.what() << std::endl;
-            throw;
+                std::cout << "statement:" << e.what() << std::endl;
+                throw;
+            }
         }
+        return result;
     }
 
     void addPercentsToName(std::string& name) {
@@ -220,46 +220,51 @@ namespace database
         }
     }
 
+
     std::vector<Person> Person::search(std::string first_name, std::string last_name)
     {
-        try
-        {
+        std::vector<Person> result;
+        addPercentsToName(last_name);
+        addPercentsToName(first_name);
+        Person a;
+        for (std::string hint: database::Database::get_all_hints()) {
             Poco::Data::Session session = database::Database::get().create_session();
             Statement select(session);
-            std::vector<Person> result;
-            Person a;
+            try {
 
-            addPercentsToName(last_name);
-            addPercentsToName(first_name);
 
-            select << "SELECT login, first_name, last_name, age FROM Person where first_name LIKE ? and last_name LIKE ?",
-                into(a._login),
-                into(a._first_name),
-                into(a._last_name),
-                into(a._age),
-                use(first_name),
-                use(last_name),
-                range(1, 1); //  iterate over result set one row at a time
+                select
+                        << "SELECT login, first_name, last_name, age FROM Person where first_name LIKE ? and last_name LIKE ? " + hint,
+                        into(a._login),
+                        into(a._first_name),
+                        into(a._last_name),
+                        into(a._age),
+                        use(first_name),
+                        use(last_name),
+                        range(1, 1); //  iterate over result set one row at a time
 
-            while (!select.done())
-            {
-                select.execute();
-                result.push_back(a);
+                while (!select.done()) {
+                    select.execute();
+                    std::cout << " selecting from " << " " << hint << " result" << std::endl;
+                    std::cout << " selecting from " << " " << a._login  << std::endl;
+                    result.push_back(a);
+                }
             }
-            return result;
-        }
+            catch (Poco::Data::MySQL::ConnectionException &e) {
+                std::cout << "connection:" << e.what() << std::endl;
+              //  throw;
+            }
+            catch (Poco::Data::MySQL::StatementException &e) {
 
-        catch (Poco::Data::MySQL::ConnectionException &e)
-        {
-            std::cout << "connection:" << e.what() << std::endl;
-            throw;
-        }
-        catch (Poco::Data::MySQL::StatementException &e)
-        {
+                std::cout << "statement:" << e.what() << std::endl;
+             //   throw;
+            }
+            catch (...) {
 
-            std::cout << "statement:" << e.what() << std::endl;
-            throw;
+            }
         }
+        std :: cout << "give res" << std::endl;
+        return result;
     }
 
    
@@ -270,8 +275,9 @@ namespace database
         {
             Poco::Data::Session session = database::Database::get().create_session();
             Poco::Data::Statement insert(session);
-
-            insert << "INSERT INTO Person (login, first_name,last_name,age) VALUES(?, ?, ?, ?)",
+            std:: cout << "save to " << database::Database::get().sharding_hint(_login) << std::endl;
+            insert << "INSERT INTO Person (login, first_name,last_name,age) VALUES(?, ?, ?, ?) "
+            + database::Database::get().sharding_hint(_login),
                 use(_login),
                 use(_first_name),
                 use(_last_name),

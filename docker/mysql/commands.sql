@@ -1,5 +1,8 @@
-create user if not exists "stud" identified by "stud";
-grant all on stud.* to "stud";
+CREATE DATABASE IF NOT EXISTS sql_test;
+USE sql_test;
+
+-- create user if not exists "stud" identified by "stud";
+-- grant all on stud.* to "stud";
 CREATE TABLE IF NOT EXISTS `Person`
 (
     `login`  VARCHAR(256) CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL,
